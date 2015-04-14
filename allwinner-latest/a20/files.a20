@@ -1,0 +1,5 @@
+# $FreeBSD: head/sys/arm/allwinner/a20/files.a20 280831 2015-03-29 22:43:39Z andrew $
+
+arm/arm/gic.c				standard
+
+arm/allwinner/a20/a20_mp.c		optional	smp

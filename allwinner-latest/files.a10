@@ -1,0 +1,3 @@
+# $FreeBSD: head/sys/arm/allwinner/files.a10 280831 2015-03-29 22:43:39Z andrew $
+
+arm/allwinner/aintc.c			standard
