@@ -1,5 +1,5 @@
-#ifndef A10_DMA_H 
-#define A10_DMA_H 
+#ifndef AWIN_DMA_H 
+#define AWIN_DMA_H  
 /* This file will contain the generic data structures used to manipulate DMA controller for allwinner board. */ 
 
 /* Structures used for DMA access. */ 
