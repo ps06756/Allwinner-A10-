@@ -7,10 +7,11 @@
 
 /* Structures used for DMA access. */ 
 
-struct a10_dma_controller { 
+/* struct a10_dma_controller { 
  	uint32_t (*dma_get_config)(void*),
 	void (*dma_set_config)(void*, uint32_t conf)
 } ; 
+*/ 
 	
 
 struct a10_dma_softc { 
@@ -63,8 +64,8 @@ enum a10_dma_type {
 
 /* Some macros for reading and writing from the registers.(to be used with softc */ 
 
-#define DMA_READ(sc, reg) \ 
+#define DMA_READ(sc, reg) \
 	bus_space_read_4((sc)->sc_bst, (sc)->sc_bsh, (reg)) 
-#define DMA_WRITE(sc, reg, val) \ 
+#define DMA_WRITE(sc, reg, val) \
 	bus_space_write_4((sc)->sc_bst, (sc)->sc_bsh, (reg), (val)) 
 #endif 

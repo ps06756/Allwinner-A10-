@@ -54,6 +54,8 @@ __FBSDID("$FreeBSD");
 struct a10_mmc_softc {
 	device_t		a10_dev;
 	struct mtx		a10_mtx;
+	bus_space_tag_t 	a10_bst ; 
+	bus_space_handle_t a10_bsh  ; 
 	struct resource *	a10_mem_res;
 	struct resource *	a10_irq_res;
 	struct a10_dma_softc 	dma_sc ; 
@@ -69,7 +71,8 @@ static int a10_mmc_probe(device_t);
 static int a10_mmc_attach(device_t);
 static int a10_mmc_detach(device_t);
 static int a10_mmc_dma_attach(device_t)  ; 
-static void a10_mmc_release_resources(struct a10_mmc_softc*) ; 
+static void a10_mmc_callback(void* arg, bus_dma_segment_t* segs, int nseg, int error) ; 
+static void a10_mmc_free_resources(struct a10_mmc_softc*) ; 
 static void a10_mmc_intr(void *);
 
 static int a10_mmc_update_ios(device_t, device_t);
@@ -147,11 +150,11 @@ a10_mmc_attach(device_t dev)
 	if(a10_mmc_dma_attach(dev) !=0)
 	{
 		device_printf(dev, "Setting up DMA failed!\n") ; 
-		use_dma = 0 ; 
+		sc->use_dma = 0 ; 
 		return (ENOMEM) ; 
 	}
 	
-	use_dma = 1 ; 
+	sc->use_dma = 1 ; 
 
 	if (a10_clk_mmc_activate(&sc->mod_clk) != 0)
 		return (ENXIO);
@@ -216,6 +219,8 @@ a10_mmc_detach(device_t dev)
 static int 
 a10_mmc_dma_attach(device_t dev) 
 {
+	struct a10_mmc_softc* sc = device_get_softc(dev) ; 
+
 	/* Allocate parent DMA tag. */ 
 	if(bus_dma_tag_create(bus_get_dma_tag(dev),
 				1,
@@ -230,21 +235,21 @@ a10_mmc_dma_attach(device_t dev)
 				0,
 				NULL,
 				NULL,
-				&(sc->dma_sc).a10_mmc_parent_dma_tag)) {  
+				&(sc->dma_sc).a10_mmc_dma_parent_tag)) {  
 		device_printf(dev, "Cannot allocate a10_mmc parent DMA tag!\n") ; 
 		return (ENOMEM) ; 
 	}	
 	
 	/* Allocate DMA tag for this device.*/ 
-	if(bus_dma_tag_create(sc->a10_mmc_parent_dma_tag, 
+	if(bus_dma_tag_create((sc->dma_sc).a10_mmc_dma_parent_tag, 
 				1, 
 				0,
 				BUS_SPACE_MAXADDR,
 				BUS_SPACE_MAXADDR,
 				NULL,
 				NULL,
-				MAX_BAZ_SIZE,
-				MAX_BAZ_SCATTER,
+				1024,
+				1,
 				BUS_SPACE_MAXSIZE_32BIT,
 				0,
 				NULL,
@@ -261,34 +266,45 @@ a10_mmc_dma_attach(device_t dev)
 		return (ENOMEM) ; 
 	}
 
-	error = bus_dmamap_load((sc->(dma_sc)).a10_mmc_dma_tag, 
-				(sc->(dma_sc)).a10_mmc_dma_map,
-				(sc->(dma_sc)).a10_mmc_buf,
+	uint32_t error = bus_dmamap_load((sc->dma_sc).a10_mmc_dma_tag, 
+				(sc->dma_sc).a10_mmc_dma_map,
+				(sc->dma_sc).buff,
 				BUFF_SIZE,
 				a10_mmc_callback,
-				(sc->(dma_sc)).a10_mmc_busaddr,
+				(sc->dma_sc).a10_mmc_busaddr,
 				BUS_DMA_NOWAIT) ; 
-	if(error || sc->a10_mmc_busaddr == 0) { 
+	if(error || (sc->dma_sc).a10_mmc_busaddr == 0) { 
 		device_printf(dev, "Cannot load a10_mmc DMA memory!\n") ; 
-		a10_mmc_free_resource(sc) ; 
+		a10_mmc_free_resources(sc) ; 
 		return (ENOMEM) ; 
 	}
+
+	return (0) ; 
 	
 } 	
+static void a10_mmc_callback(void* arg, bus_dma_segment_t* segs, int nseg, int error)
+{
+	if(error) {  
+		printf("Error in mmc card callback function, error code = %u\n", error) ; 
+		return;  
+	}	
+	*(bus_addr_t*)arg = segs[0].ds_addr ; 
+}
+
 static void
-a10_mmc_free_resources(struct a10_mmmc_softc* sc)
+a10_mmc_free_resources(struct a10_mmc_softc* sc)
 {
 	if(sc == NULL)
 		return ; 
 
 	if(sc->a10_intrhand != NULL)
-		bus_teardown_intr(sc->dev, sc->a10_irq_res, sc->a10_intrhand) ; 	
+		bus_teardown_intr(sc->a10_dev, sc->a10_irq_res, sc->a10_intrhand) ; 	
 
 	if(sc->a10_irq_res != NULL)
-		bus_release_resources(sc->dev, SYS_RES_IRQ, 0, sc->a10_irq_res) ; 
+		bus_release_resource(sc->a10_dev, SYS_RES_IRQ, 0, sc->a10_irq_res) ; 
 
 	if(sc->a10_mem_res != NULL) 
-		bus_release_resources(sc->dev, SYS_RES_MEMORY, 0, sc->a10_mem_res) ;
+		bus_release_resource(sc->a10_dev, SYS_RES_MEMORY, 0, sc->a10_mem_res) ;
 }
 		
 static void
