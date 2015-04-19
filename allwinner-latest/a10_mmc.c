@@ -49,17 +49,15 @@ __FBSDID("$FreeBSD");
 
 #include <arm/allwinner/a10_clk.h>
 #include <arm/allwinner/a10_mmc.h>
+#include <arm/allwinner/awin_dma.h>
 
 struct a10_mmc_softc {
 	device_t		a10_dev;
 	struct mtx		a10_mtx;
 	struct resource *	a10_mem_res;
 	struct resource *	a10_irq_res;
-	bus_space_tag_t		a10_bst;
-	bus_space_handle_t	a10_bsh;
-	bus_dma_tag_t 		a10_mmc_parent_dma_tag ;  	
-	bus_dma_tag_t 		a10_mmc_dma_tag ; 
-	bus_dmamap_t 		a10_mmc_dma_map ; 
+	struct a10_dma_softc 	dma_sc ; 
+	uint8_t 		use_dma ; 
 	void *			a10_intrhand;
 	struct mmc_host		a10_host;
 	struct mmc_request *	a10_req;
@@ -70,6 +68,7 @@ struct a10_mmc_softc {
 static int a10_mmc_probe(device_t);
 static int a10_mmc_attach(device_t);
 static int a10_mmc_detach(device_t);
+static int a10_mmc_dma_attach(device_t)  ; 
 static void a10_mmc_release_resources(struct a10_mmc_softc*) ; 
 static void a10_mmc_intr(void *);
 
@@ -78,6 +77,7 @@ static int a10_mmc_request(device_t, device_t, struct mmc_request *);
 static int a10_mmc_get_ro(device_t, device_t);
 static int a10_mmc_acquire_host(device_t, device_t);
 static int a10_mmc_release_host(device_t, device_t);
+
 
 #define	a10_mmc_lock(_sc)	mtx_lock(&(_sc)->a10_mtx)
 #define	a10_mmc_unlock(_sc)	mtx_unlock(&(_sc)->a10_mtx)
@@ -102,7 +102,6 @@ a10_mmc_probe(device_t dev)
 static int
 a10_mmc_attach(device_t dev)
 {
-	printf("Inside attach a10_mmc_attach\n") ; 
 	device_t child;
 	int rid;
 	struct a10_mmc_softc *sc;
@@ -115,7 +114,6 @@ a10_mmc_attach(device_t dev)
 
 	mtx_init(&sc->a10_mtx, device_get_nameunit(sc->a10_dev), "a10_mmc", MTX_DEF);
 
-	printf("mutex initialized\n") ; 
 	rid = 0;
 	sc->a10_mem_res = bus_alloc_resource_any(dev, SYS_RES_MEMORY, &rid,
 	    RF_ACTIVE);
@@ -123,7 +121,6 @@ a10_mmc_attach(device_t dev)
 		device_printf(dev, "cannot allocate memory window\n");
 		return (ENXIO);
 	}
-	printf("Allocted memory\n") ; 
 
 	sc->a10_bst = rman_get_bustag(sc->a10_mem_res);
 	sc->a10_bsh = rman_get_bushandle(sc->a10_mem_res);
@@ -137,7 +134,6 @@ a10_mmc_attach(device_t dev)
 		//bus_release_resource(dev, SYS_RES_MEMORY, 0, sc->a10_mem_res);
 		return (ENXIO);
 	}
-	printf("Allocted interrupt\n") ; 
 
 	if (bus_setup_intr(dev, sc->a10_irq_res, INTR_TYPE_MISC | INTR_MPSAFE,
 	    NULL, a10_mmc_intr, sc, &sc->a10_intrhand)) {
@@ -148,69 +144,19 @@ a10_mmc_attach(device_t dev)
 		return (ENXIO);
 	}
 	
-	/* Allocate parent DMA tag. */ 
-	if(bus_dma_tag_create(bus_get_dma_tag(dev),
-				1,
-				0,
-				BUS_SPACE_MAXADDR,
-				BUS_SPACE_MAXADDR,
-				NULL,
-				NULL,
-				BUS_SPACE_MAXSIZE_32BIT,
-				BUS_SPACE_UNRESTRICTED,
-				BUS_SPACE_MAXSIZE_32BIT,
-				0,
-				NULL,
-				NULL,
-				&sc->a10_mmc_parent_dma_tag)) {  
-		device_printf(dev, "Cannot allocate parent DMA tag!\n") ; 
+	if(a10_mmc_dma_attach(dev) !=0)
+	{
+		device_printf(dev, "Setting up DMA failed!\n") ; 
+		use_dma = 0 ; 
 		return (ENOMEM) ; 
-	}	
-	
-	/* Allocate DMA tag for this device.*/ 
-	if(bus_dma_tag_create(sc->a10_mmc_parent_dma_tag, 
-				1, 
-				0,
-				BUS_SPACE_MAXADDR,
-				BUS_SPACE_MAXADDR,
-				NULL,
-				NULL,
-				MAX_BAZ_SIZE,
-				MAX_BAZ_SCATTER,
-				BUS_SPACE_MAXSIZE_32BIT,
-				0,
-				NULL,
-				NULL,
-				&sc->a10_mmc_dma_tag)) { 
-		device_printf(dev, "Cannot allocate a10_mmc DMA tag!\n") ; 
-		return (ENOMEM) ; 	
 	}
 	
-	if(bus_dmamap_create(sc->a10_mmc_dma_tag, 
-				0,
-				&sc->a10_mmc_dma_map)) { 
-		device_printf(dev, "Cannot allocate a10_mmc DMA map!\n") ; 
-		return (ENOMEM) ; 
-	}
-
-	error = bus_dmamap_load(sc->a10_mmc_dma_tag, 
-				sc->a10_mmc_dma_map,
-				sc->a10_mmc_buf,
-				BUF_SIZE,
-				a10_mmc_callback,
-				&sc->a10_mmc_busaddr,
-				BUS_DMA_NOWAIT) ; 
-	if(error || sc->a10_mmc_busaddr == 0) { 
-		device_printf(dev, "Cannot map DMA memory!\n") ; 
-		a10_mmc_free_resource(sc) ; 
-		return (ENOMEM) ; 
-	}
+	use_dma = 1 ; 
 
 	if (a10_clk_mmc_activate(&sc->mod_clk) != 0)
 		return (ENXIO);
 device_printf(dev, "%s: mod_clk: %d\n", __func__, sc->mod_clk);
 
-	printf("Before while loop\n") ; 
 	/* Reset controller */
 	reg = a10_mmc_read_4(sc, A10_MMC_GCTRL);
 	reg |= A10_MMC_SOFT_RESET | A10_MMC_FIFO_RESET | A10_MMC_DMA_RESET;
@@ -223,7 +169,7 @@ device_printf(dev, "%s: mod_clk: %d\n", __func__, sc->mod_clk);
 	}
 	if(time_left == 0) { 
 
-		device_printf(dev, "reset timedout\n") ; 
+		device_printf(dev, "Reset timedout\n") ; 
 		return (ENXIO) ; 
 	}
 	/* config DMA/Interrupt Trigger threshold */
@@ -263,16 +209,78 @@ a10_mmc_detach(device_t dev)
 {
 	struct a10_mmc_softc* sc = device_get_softc(dev) ; 
 	a10_mmc_free_resources(sc) ; 
+	/*TODO :- add code for tearing down DMA */ 
 	return (0);
 }
 
+static int 
+a10_mmc_dma_attach(device_t dev) 
+{
+	/* Allocate parent DMA tag. */ 
+	if(bus_dma_tag_create(bus_get_dma_tag(dev),
+				1,
+				0,
+				BUS_SPACE_MAXADDR,
+				BUS_SPACE_MAXADDR,
+				NULL,
+				NULL,
+				BUS_SPACE_MAXSIZE_32BIT,
+				BUS_SPACE_UNRESTRICTED,
+				BUS_SPACE_MAXSIZE_32BIT,
+				0,
+				NULL,
+				NULL,
+				&(sc->dma_sc).a10_mmc_parent_dma_tag)) {  
+		device_printf(dev, "Cannot allocate a10_mmc parent DMA tag!\n") ; 
+		return (ENOMEM) ; 
+	}	
+	
+	/* Allocate DMA tag for this device.*/ 
+	if(bus_dma_tag_create(sc->a10_mmc_parent_dma_tag, 
+				1, 
+				0,
+				BUS_SPACE_MAXADDR,
+				BUS_SPACE_MAXADDR,
+				NULL,
+				NULL,
+				MAX_BAZ_SIZE,
+				MAX_BAZ_SCATTER,
+				BUS_SPACE_MAXSIZE_32BIT,
+				0,
+				NULL,
+				NULL,
+				&(sc->dma_sc).a10_mmc_dma_tag)) { 
+		device_printf(dev, "Cannot allocate a10_mmc DMA tag!\n") ; 
+		return (ENOMEM) ; 	
+	}
+	
+	if(bus_dmamap_create((sc->dma_sc).a10_mmc_dma_tag, 
+				0,
+				&(sc->dma_sc).a10_mmc_dma_map)) { 
+		device_printf(dev, "Cannot allocate a10_mmc DMA map!\n") ; 
+		return (ENOMEM) ; 
+	}
+
+	error = bus_dmamap_load((sc->(dma_sc)).a10_mmc_dma_tag, 
+				(sc->(dma_sc)).a10_mmc_dma_map,
+				(sc->(dma_sc)).a10_mmc_buf,
+				BUFF_SIZE,
+				a10_mmc_callback,
+				(sc->(dma_sc)).a10_mmc_busaddr,
+				BUS_DMA_NOWAIT) ; 
+	if(error || sc->a10_mmc_busaddr == 0) { 
+		device_printf(dev, "Cannot load a10_mmc DMA memory!\n") ; 
+		a10_mmc_free_resource(sc) ; 
+		return (ENOMEM) ; 
+	}
+	
+} 	
 static void
 a10_mmc_free_resources(struct a10_mmmc_softc* sc)
 {
 	if(sc == NULL)
 		return ; 
 
-	/* TODO:- Dismantle DMA code also. */ 
 	if(sc->a10_intrhand != NULL)
 		bus_teardown_intr(sc->dev, sc->a10_irq_res, sc->a10_intrhand) ; 	
 

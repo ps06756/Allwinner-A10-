@@ -1,5 +1,8 @@
 #ifndef AWIN_DMA_H 
 #define AWIN_DMA_H  
+
+#include <machine/bus.h> 
+
 /* This file will contain the generic data structures used to manipulate DMA controller for allwinner board. */ 
 
 /* Structures used for DMA access. */ 
@@ -12,9 +15,12 @@ struct a10_dma_controller {
 
 struct a10_dma_softc { 
 	device_t dev ; 
-	bus_space_tag_t bst ; 
-	bus_space_handle_t bsh 
-	bus_dma_tag_t dmat ; 
+	bus_dma_tag_t a10_mmc_dma_parent_tag ; 
+	bus_dma_tag_t a10_mmc_dma_tag  ; 
+	bus_dmamap_t a10_mmc_dma_map ; 
+	void* buff ; 
+	void* a10_mmc_busaddr ; 
+	#define BUFF_SIZE 64 
 } ; 
 
 enum a10_dma_type { 
