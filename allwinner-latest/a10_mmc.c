@@ -110,6 +110,7 @@ a10_mmc_attach(device_t dev)
 	struct a10_mmc_softc *sc;
 	uint32_t reg;
 	uint32_t time_left = 0xFFFF ; 
+	uint32_t error = 0 ; 
 
 	sc = device_get_softc(dev);
 	sc->a10_dev = dev;
@@ -147,14 +148,7 @@ a10_mmc_attach(device_t dev)
 		return (ENXIO);
 	}
 	
-	if(a10_mmc_dma_attach(dev) !=0)
-	{
-		device_printf(dev, "Setting up DMA failed!\n") ; 
-		sc->use_dma = 0 ; 
-		return (ENOMEM) ; 
-	}
-	
-	sc->use_dma = 1 ; 
+	 
 
 	if (a10_clk_mmc_activate(&sc->mod_clk) != 0)
 		return (ENXIO);
@@ -202,9 +196,19 @@ device_printf(dev, "%s: mod_clk: %d\n", __func__, sc->mod_clk);
 		return (ENXIO);
 	}
 
-	return (device_probe_and_attach(child));
-
-	return (0);
+	error = device_probe_and_attach(child) ; 
+	if(error != 0)  { 
+		device_printf(dev, "device_probe_and_attach returned non-zero error code %u\n",error) ; 
+		return (error) ; 
+	}
+	
+	error = a10_mmc_dma_attach(dev) ; 	
+	if(error != 0) { 
+		device_printf(dev, "Non zero error code returned by a10_mmc_dma_attach %u\n", error) ; 
+		return (error ) ; 
+	}
+	
+	return (0) ; 
 }
 
 static int
@@ -222,7 +226,7 @@ a10_mmc_dma_attach(device_t dev)
 	struct a10_mmc_softc* sc = device_get_softc(dev) ; 
 
 	/* Allocate parent DMA tag. */ 
-	if(bus_dma_tag_create(bus_get_dma_tag(dev),
+	/* if(bus_dma_tag_create(bus_get_dma_tag(dev),
 				1,
 				0,
 				BUS_SPACE_MAXADDR,
@@ -239,16 +243,17 @@ a10_mmc_dma_attach(device_t dev)
 		device_printf(dev, "Cannot allocate a10_mmc parent DMA tag!\n") ; 
 		return (ENOMEM) ; 
 	}	
+	*/
 	
 	/* Allocate DMA tag for this device.*/ 
-	if(bus_dma_tag_create((sc->dma_sc).a10_mmc_dma_parent_tag, 
+	if(bus_dma_tag_create(bus_get_dma_tag(dev), 
 				1, 
 				0,
 				BUS_SPACE_MAXADDR,
 				BUS_SPACE_MAXADDR,
 				NULL,
 				NULL,
-				1024,
+				256,
 				1,
 				BUS_SPACE_MAXSIZE_32BIT,
 				0,
@@ -268,24 +273,24 @@ a10_mmc_dma_attach(device_t dev)
 
 	uint32_t error = bus_dmamap_load((sc->dma_sc).a10_mmc_dma_tag, 
 				(sc->dma_sc).a10_mmc_dma_map,
-				(sc->dma_sc).buff,
+				&((sc->dma_sc).buff),
 				BUFF_SIZE,
 				a10_mmc_callback,
-				(sc->dma_sc).a10_mmc_busaddr,
-				BUS_DMA_NOWAIT) ; 
-	if(error || (sc->dma_sc).a10_mmc_busaddr == 0) { 
-		device_printf(dev, "Cannot load a10_mmc DMA memory!\n") ; 
-		a10_mmc_free_resources(sc) ; 
-		return (ENOMEM) ; 
-	}
+				&((sc->dma_sc).a10_mmc_busaddr),
+				0) ; 
 
-	return (0) ; 
+	if(error || (sc->dma_sc).a10_mmc_busaddr == 0) { 
+		device_printf(sc->a10_dev, "error code = %u\n",error) ; 
+		device_printf(sc->a10_dev, "a10_mmc_busaddr = %u\n", (sc->dma_sc).a10_mmc_busaddr) ; 
+	}
+		return (0) ; 
 	
 } 	
 static void a10_mmc_callback(void* arg, bus_dma_segment_t* segs, int nseg, int error)
 {
 	if(error) {  
-		printf("Error in mmc card callback function, error code = %u\n", error) ; 
+		printf("a10_mmc0 : Error in mmc card callback function, error code = %u\n", error) ; 
+		printf("a10_mmc0 : Error EFBIG=%u and ENOMEM = %u\n", EFBIG, ENOMEM) ; 
 		return;  
 	}	
 	*(bus_addr_t*)arg = segs[0].ds_addr ; 

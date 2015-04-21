@@ -19,8 +19,8 @@ struct a10_dma_softc {
 	bus_dma_tag_t a10_mmc_dma_parent_tag ; 
 	bus_dma_tag_t a10_mmc_dma_tag  ; 
 	bus_dmamap_t a10_mmc_dma_map ; 
-	void* buff ; 
-	void* a10_mmc_busaddr ; 
+	uint32_t buff ; 
+	uint32_t a10_mmc_busaddr ; 
 	#define BUFF_SIZE 64 
 } ; 
 
