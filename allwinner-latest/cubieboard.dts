@@ -57,6 +57,10 @@
 			status = "okay";
 		};
 
+		dma@01c02000 { 
+			status = "okay" ; 
+		} ; 
+
 		emac@01c0b000 {
 			status = "okay";
 		};
