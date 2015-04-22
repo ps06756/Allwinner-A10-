@@ -71,7 +71,9 @@ static void a10_dma_release_resources(device_t) ;
 
 static void a10_dma_intr(void*) ; 
 
-uint8_t a10_get_dma_channel() ; /* Currently will only work for Dedicated DMA channel types. */ 
+/* Currently these two methods are implemented for only DDMA */ 
+uint8_t a10_get_dma_channel(void *fp(bus_space_tag_t, bus_space_handle_t, uint8_t)) ; 
+void a10_free_dma_channel(uint8_t, void *fp(bus_space_tag_t, bus_space_handle_t, uint8_t)) ; 
 
 static int a10_dma_probe(device_t dev) 
 {
@@ -154,25 +156,26 @@ static void a10_dma_release_resources(device_t dev)
 /* Not implemented yet. */ 
 static void a10_dma_intr(void* ptr)
 {
-	struct a10_dma_softc* sc = (struct a10_dma_softc*) ptr ; 
+	//struct a10_dma_softc* sc = (struct a10_dma_softc*) ptr ; 
 	return  ; 
 }
 
 uint8_t a10_get_dma_channel(void *auto_config(bus_space_tag_t, bus_space_handle_t, uint8_t))
 {
-	if(a10_dma_cnt->nddma_channels_in_use >= 8)
-		return (-1) ; 
-	uint8_t pos = -1 ; 
-	for(int i=0; i<8; i++) { 
+	if(a10_dma_cnt->nddma_channels_in_use >= NDDMA)
+		return (NDDMA + 1) ; 
+	uint8_t pos = NDDMA+1 ; 
+	for(int i=0; i<NDDMA; i++) { 
 		if(a10_dma_cnt->ddma_channels[i].in_use == 0) 
 			pos = i ; 
 		}
-	if(pos == -1)
-		return -1;  
-	autoconfig(a10_dma_cnt->sc->a10_dma_bst, a10_dma_cnt->sc->a10_dma_bst,pos) ; 
-	a10_dma_cnt->ddma_channels[i].in_use = 1 ; 
+	if(pos > NDDMA)
+		return (pos) ; 
+
+	auto_config(a10_dma_cnt->sc->a10_dma_bst, a10_dma_cnt->sc->a10_dma_bsh,pos) ; 
+	a10_dma_cnt->ddma_channels[pos].in_use = 1 ; 
 	a10_dma_cnt->nddma_channels_in_use++ ; 
-	a10_dma_cnt->ddma_channels[i].a10_dma_channel_type = DDMA ; 
+	a10_dma_cnt->ddma_channels[pos].a10_dma_channel_type = DDMA ; 
 	device_printf(a10_dma_cnt->sc->a10_dma_dev, "Autoconfiguring of DDMA channel %u done.\n", pos) ; 
 	return pos ; 
 }
@@ -184,7 +187,7 @@ void a10_free_dma_channel(uint8_t pos, void* auto_config(bus_space_tag_t, bus_sp
 		return ; 
 	}
 
-	autoconfig(a10_dma_cnt->sc->a10_dma_bst, a10_dma_cnt->sc->a10_dma_bsh, uint8_t) ; 
+	auto_config(a10_dma_cnt->sc->a10_dma_bst, a10_dma_cnt->sc->a10_dma_bsh, pos) ; 
 	
 	a10_dma_cnt->ddma_channels[pos].in_use = 0 ; 
 	a10_dma_cnt->nddma_channels_in_use-- ; 
