@@ -112,12 +112,12 @@
 		};
 
 		dma@01c02000 {  
-			compatible = "allwinner,sun4i-a10-dma" ; 
-			reg= <0x01x02000 0x1000> ; 
-			interrupts = <27> ; 
-			interrupt-parent = <&AINTC> ; 
-			status = "disabled" ; 
-			} ;  
+			compatible = "allwinner,sun4i-a10-dma"; 
+			reg = <0x01c02000 0x1000>; 
+			interrupts = <27>; 
+			interrupt-parent = <&AINTC>; 
+			status = "disabled"; 
+		} ;  
 
 		sata@01c18000 {
 			compatible = "allwinner,sun4i-ahci";

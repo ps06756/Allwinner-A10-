@@ -49,7 +49,6 @@ __FBSDID("$FreeBSD");
 
 #include <arm/allwinner/a10_clk.h>
 #include <arm/allwinner/a10_mmc.h>
-#include <arm/allwinner/awin_dma.h>
 
 struct a10_mmc_softc {
 	device_t		a10_dev;
@@ -58,8 +57,6 @@ struct a10_mmc_softc {
 	bus_space_handle_t a10_bsh  ; 
 	struct resource *	a10_mem_res;
 	struct resource *	a10_irq_res;
-	struct a10_dma_softc 	dma_sc ; 
-	uint8_t 		use_dma ; 
 	void *			a10_intrhand;
 	struct mmc_host		a10_host;
 	struct mmc_request *	a10_req;
@@ -70,8 +67,6 @@ struct a10_mmc_softc {
 static int a10_mmc_probe(device_t);
 static int a10_mmc_attach(device_t);
 static int a10_mmc_detach(device_t);
-static int a10_mmc_dma_attach(device_t)  ; 
-static void a10_mmc_callback(void* arg, bus_dma_segment_t* segs, int nseg, int error) ; 
 static void a10_mmc_free_resources(struct a10_mmc_softc*) ; 
 static void a10_mmc_intr(void *);
 
@@ -202,13 +197,7 @@ device_printf(dev, "%s: mod_clk: %d\n", __func__, sc->mod_clk);
 		return (error) ; 
 	}
 	
-	error = a10_mmc_dma_attach(dev) ; 	
-	if(error != 0) { 
-		device_printf(dev, "Non zero error code returned by a10_mmc_dma_attach %u\n", error) ; 
-		return (error ) ; 
-	}
-	
-	return (0) ; 
+	return (0) ; 	
 }
 
 static int
@@ -220,32 +209,11 @@ a10_mmc_detach(device_t dev)
 	return (0);
 }
 
-static int 
+/* static int 
 a10_mmc_dma_attach(device_t dev) 
 {
 	struct a10_mmc_softc* sc = device_get_softc(dev) ; 
 
-	/* Allocate parent DMA tag. */ 
-	/* if(bus_dma_tag_create(bus_get_dma_tag(dev),
-				1,
-				0,
-				BUS_SPACE_MAXADDR,
-				BUS_SPACE_MAXADDR,
-				NULL,
-				NULL,
-				BUS_SPACE_MAXSIZE_32BIT,
-				BUS_SPACE_UNRESTRICTED,
-				BUS_SPACE_MAXSIZE_32BIT,
-				0,
-				NULL,
-				NULL,
-				&(sc->dma_sc).a10_mmc_dma_parent_tag)) {  
-		device_printf(dev, "Cannot allocate a10_mmc parent DMA tag!\n") ; 
-		return (ENOMEM) ; 
-	}	
-	*/
-	
-	/* Allocate DMA tag for this device.*/ 
 	if(bus_dma_tag_create(bus_get_dma_tag(dev), 
 				1, 
 				0,
@@ -286,15 +254,7 @@ a10_mmc_dma_attach(device_t dev)
 		return (0) ; 
 	
 } 	
-static void a10_mmc_callback(void* arg, bus_dma_segment_t* segs, int nseg, int error)
-{
-	if(error) {  
-		printf("a10_mmc0 : Error in mmc card callback function, error code = %u\n", error) ; 
-		printf("a10_mmc0 : Error EFBIG=%u and ENOMEM = %u\n", EFBIG, ENOMEM) ; 
-		return;  
-	}	
-	*(bus_addr_t*)arg = segs[0].ds_addr ; 
-}
+*/ 
 
 static void
 a10_mmc_free_resources(struct a10_mmc_softc* sc)
