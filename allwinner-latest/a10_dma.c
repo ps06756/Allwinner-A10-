@@ -141,3 +141,20 @@ static void a10_dma_release_resources(device_t dev)
 }
 
 
+static device_method_t a10_dma_methods[] = { 
+	DEVMETHOD(device_probe, a10_dma_probe),
+	DEVMETHOD(device_attach, a10_dma_attach),
+	DEVMETHOD(device_detach, a10_dma_detach),
+
+	DEVMETHOD_END
+} ; 
+
+static devclass_t a10_dma_devclass ; 
+
+static driver_t a10_dma_driver = {  
+	"a10_dma", 
+	a10_dma_methods,
+	sizeof(struct a10_dma_softc)
+} ; 
+
+DRIVER_MODULE(a10_dma, simplebus, a10_dma_driver ,a10_dma_devclass,0,0) ; 
