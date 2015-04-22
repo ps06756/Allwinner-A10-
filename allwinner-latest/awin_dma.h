@@ -1,33 +1,10 @@
 #ifndef AWIN_DMA_H 
 #define AWIN_DMA_H  
 
+#include <sys/mutex.h> 
+#include <sys/lock.h> 
+
 #include <machine/bus.h> 
-
-/* This file will contain the generic data structures used to manipulate DMA controller for allwinner board. */ 
-
-/* Structures used for DMA access. */ 
-
-/* struct a10_dma_controller { 
- 	uint32_t (*dma_get_config)(void*),
-	void (*dma_set_config)(void*, uint32_t conf)
-} ; 
-*/ 
-	
-
-struct a10_dma_softc { 
-	device_t dev ; 
-	bus_dma_tag_t a10_mmc_dma_parent_tag ; 
-	bus_dma_tag_t a10_mmc_dma_tag  ; 
-	bus_dmamap_t a10_mmc_dma_map ; 
-	uint32_t buff ; 
-	uint32_t a10_mmc_busaddr ; 
-	#define BUFF_SIZE 64 
-} ; 
-
-enum a10_dma_type { 
-	NDMA, 	
-	DDMA
-} ; 
 
 /* module base address. */ 
 #define DMA (0x01C02000) 
@@ -64,8 +41,14 @@ enum a10_dma_type {
 
 /* Some macros for reading and writing from the registers.(to be used with softc */ 
 
-#define DMA_READ(sc, reg) \
-	bus_space_read_4((sc)->sc_bst, (sc)->sc_bsh, (reg)) 
-#define DMA_WRITE(sc, reg, val) \
-	bus_space_write_4((sc)->sc_bst, (sc)->sc_bsh, (reg), (val)) 
+#define DMA_READ(_sc, reg) \
+	bus_space_read_4((_sc)->a10_dma_bst, (_sc)->a10_dma_bsh, (reg)) 
+#define DMA_WRITE(_sc, reg, val) \
+	bus_space_write_4((_sc)->a10_dma_bst, (_sc)->a10_dma_bsh, (reg), (val)) 
+
+/* Macros for locking/unlocking mutex on softc. */ 
+
+#define a10_dma_lock(_sc) mtx_lock(&(_sc)->a10_dma_mtx) 
+#define a10_dma_unlock(_sc) mtx_unlock(&(_sc)->a10_dma_mtx) 
+	
 #endif 
