@@ -7,6 +7,7 @@ initialization work. */
 #include <sys/kernel.h> 
 #include <sys/lock.h> 
 #include <sys/malloc.h> 
+#include <sys/types.h> 
 #include <sys/module.h> 
 #include <sys/mutex.h> 
 #include <sys/resource.h> 
@@ -43,31 +44,34 @@ struct a10_dma_softc {
 } ; 
 
 struct a10_dma_channel { 
-	struct mtx a10_mtx ; 
-	struct a10_dma_softc* sc ; 
 	bus_dma_tag_t a10_dma_tag ; 
 	bus_dmamap_t a10_dma_map ; 
 	uint32_t buff ; 
 	uint32_t a10_dma_busaddr ; 
-	enum a10_dma_channel_type a10_dma_type ; 
+	enum a10_dma_channel_type a10_dma_channel_type ; 
 	uint8_t in_use ; 
 } ; 
 
 struct a10_dma_controller { 
 	struct a10_dma_softc* sc ; 
-	struct mtx a10_dma_controller_mtx ; 
 	struct a10_dma_channel ddma_channels[NDDMA] ; 
 	struct a10_dma_channel ndma_channels[NNDMA] ; 
-	uint32_t ndma_channels_in_use ; 
-	uint32_t ddma_channels_in_use ; 
+	uint32_t nndma_channels_in_use ; 
+	uint32_t nddma_channels_in_use ; 
 } ; 
+
+static struct a10_dma_controller* a10_dma_cnt; 
+
+static MALLOC_DEFINE(M_DMA_CONT, "memory for dma controller", "memory for dma controller") ; 
 
 static int a10_dma_probe(device_t) ; 
 static int a10_dma_attach(device_t) ; 
 static int a10_dma_detach(device_t) ; 
 static void a10_dma_release_resources(device_t) ; 
+
 static void a10_dma_intr(void*) ; 
-struct a10_dma_channel* get_a10_dma_channel() ; /* Currently will only work for Dedicated DMA channel types. */ 
+
+uint8_t a10_get_dma_channel() ; /* Currently will only work for Dedicated DMA channel types. */ 
 
 static int a10_dma_probe(device_t dev) 
 {
@@ -117,9 +121,9 @@ static int a10_dma_attach(device_t dev)
 
 	sc->a10_dma_intrhand = a10_dma_intr ; 
 	
-	/* Question :- Do we have to setup a clock for DMA or not ? */ 
-	/* Question :- What more do we have to write in here. */ 
-	
+	a10_dma_cnt = malloc(sizeof(struct a10_dma_controller), M_DMA_CONT, M_ZERO | M_WAITOK ) ; 
+	a10_dma_cnt->sc = sc ;  
+
 	return (0) ; 
 }  
 
@@ -143,11 +147,48 @@ static void a10_dma_release_resources(device_t dev)
 		bus_teardown_intr(dev, sc->a10_dma_mem_resource, sc->a10_dma_intrhand) ; 
 		bus_release_resource(dev, SYS_RES_IRQ, sc->a10_dma_irq_rid, sc->a10_dma_irq_resource) ; 
 	} 
+
+	free(a10_dma_cnt, M_DMA_CONT) ; 
 }
 
+/* Not implemented yet. */ 
 static void a10_dma_intr(void* ptr)
 {
+	struct a10_dma_softc* sc = (struct a10_dma_softc*) ptr ; 
 	return  ; 
+}
+
+uint8_t a10_get_dma_channel(void *auto_config(bus_space_tag_t, bus_space_handle_t, uint8_t))
+{
+	if(a10_dma_cnt->nddma_channels_in_use >= 8)
+		return (-1) ; 
+	uint8_t pos = -1 ; 
+	for(int i=0; i<8; i++) { 
+		if(a10_dma_cnt->ddma_channels[i].in_use == 0) 
+			pos = i ; 
+		}
+	if(pos == -1)
+		return -1;  
+	autoconfig(a10_dma_cnt->sc->a10_dma_bst, a10_dma_cnt->sc->a10_dma_bst,pos) ; 
+	a10_dma_cnt->ddma_channels[i].in_use = 1 ; 
+	a10_dma_cnt->nddma_channels_in_use++ ; 
+	a10_dma_cnt->ddma_channels[i].a10_dma_channel_type = DDMA ; 
+	device_printf(a10_dma_cnt->sc->a10_dma_dev, "Autoconfiguring of DDMA channel %u done.\n", pos) ; 
+	return pos ; 
+}
+
+void a10_free_dma_channel(uint8_t pos, void* auto_config(bus_space_tag_t, bus_space_handle_t, uint8_t))
+{	
+	if((pos >= 8) || (pos < 0)) { 
+		device_printf(a10_dma_cnt->sc->a10_dma_dev, "Invalid position %u while freeing dma channel!\n",pos) ; 
+		return ; 
+	}
+
+	autoconfig(a10_dma_cnt->sc->a10_dma_bst, a10_dma_cnt->sc->a10_dma_bsh, uint8_t) ; 
+	
+	a10_dma_cnt->ddma_channels[pos].in_use = 0 ; 
+	a10_dma_cnt->nddma_channels_in_use-- ; 
+	device_printf(a10_dma_cnt->sc->a10_dma_dev, "Freed DDMA Channel no %u\n", pos) ; 
 }
 
 static device_method_t a10_dma_methods[] = { 
